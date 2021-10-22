@@ -18,7 +18,7 @@ struct Interval {
 }
 
 async fn generate_otp(
-    body: Option<web::Json<Interval>>,
+    query: Option<web::Query<Interval>>,
     auth: web::Data<TOTP>,
 ) -> Result<HttpResponse, ErrorResponse> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
@@ -27,8 +27,8 @@ async fn generate_otp(
         return Err(ErrorResponse::ServerError);
     }
 
-    let interval = if body.is_some() {
-        body.unwrap().interval
+    let interval = if query.is_some() {
+        query.unwrap().interval
     } else {
         DEFAULT_INTERVAL
     };
@@ -73,7 +73,7 @@ async fn verify_otp(
 }
 
 pub fn setup(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("/generate").route(web::post().to(generate_otp)));
+    cfg.service(web::resource("/generate").route(web::get().to(generate_otp)));
 
-    cfg.service(web::resource("/verify").route(web::post().to(verify_otp)));
+    cfg.service(web::resource("/verify").route(web::put().to(verify_otp)));
 }
