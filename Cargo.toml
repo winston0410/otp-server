@@ -1,0 +1,12 @@
+[package]
+name = "otp-server"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+otpauth = "0.4.1"
+actix-web = "4.0.0-beta.9"
+serde = "1.0.130"
+env_logger = "0.9.0"
+derive_more = "0.99.16"
+uuid = { version = "0.8.2", features = ["v5"] }
