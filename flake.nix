@@ -4,11 +4,6 @@
   inputs = {
     nixpkgs = { url = "github:nixos/nixpkgs/nixos-unstable"; };
 
-    mkNodePackage = {
-      url = "github:winston0410/mkNodePackage/develop";
-      inputs = { nixpkgs.follows = "nixpkgs"; };
-    };
-
     flake-utils = {
       url = "github:numtide/flake-utils";
       inputs = { nixpkgs.follows = "nixpkgs"; };
