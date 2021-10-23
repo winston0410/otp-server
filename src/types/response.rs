@@ -9,10 +9,8 @@ pub struct ErrorResponseBody {
 
 #[derive(Debug, Display, Error)]
 pub enum ErrorResponse {
-    #[display(fmt = "")]
-    ClientError { message: String },
-    // #[display(fmt = "")]
-    // ExpireError { message: String },
+    BadRequest { message: String },
+    Unauthorized { message: String },
     #[allow(dead_code)]
     ServerError,
 }
@@ -26,7 +24,11 @@ fn build_response(res: &ErrorResponse, message: String) -> HttpResponse {
 impl ResponseError for ErrorResponse {
     fn error_response(&self) -> HttpResponse {
         match &*self {
-            ErrorResponse::ClientError { message } => {
+            ErrorResponse::BadRequest { message } => {
+                return build_response(self, message.to_string())
+            }
+            
+            ErrorResponse::Unauthorized { message } => {
                 return build_response(self, message.to_string())
             }
 
@@ -38,7 +40,8 @@ impl ResponseError for ErrorResponse {
 
     fn status_code(&self) -> StatusCode {
         match &*self {
-            ErrorResponse::ClientError { .. } => StatusCode::BAD_REQUEST,
+            ErrorResponse::BadRequest { .. } => StatusCode::BAD_REQUEST,
+            ErrorResponse::Unauthorized { .. } => StatusCode::UNAUTHORIZED,
             ErrorResponse::ServerError { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
