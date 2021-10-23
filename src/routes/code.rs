@@ -1,25 +1,32 @@
 use crate::types::response::ErrorResponse;
 use actix_web::{web, FromRequest, HttpResponse, Result};
-use otpauth::{HOTP, TOTP};
+use otpauth::TOTP;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_INTERVAL: u64 = 60;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Code {
+struct CodeRes {
     code: u32,
-    interval: Option<u64>
+    interval: u64,
+    id: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CodeReq {
+    code: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Interval {
-    interval: u64,
+    interval: Option<u64>,
+    id: Option<String>,
 }
 
 async fn generate_otp(
-    query: Option<web::Query<Interval>>,
-    auth: web::Data<TOTP>,
+    query: web::Query<Interval>,
+    secret: web::Data<String>,
 ) -> Result<HttpResponse, ErrorResponse> {
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
 
@@ -27,26 +34,38 @@ async fn generate_otp(
         return Err(ErrorResponse::ServerError);
     }
 
-    let interval = if query.is_some() {
-        query.unwrap().interval
-    } else {
-        DEFAULT_INTERVAL
+    let interval = match query.interval {
+        Some(expr) => expr,
+        None => DEFAULT_INTERVAL,
     };
 
+    let id = match &query.id {
+        Some(x) => x,
+        None => "",
+    };
+
+    let auth = TOTP::new(format!("{}{}", secret.get_ref(), id));
+
     let code = auth.generate(interval, timestamp.unwrap().as_secs());
-    return Ok(HttpResponse::Ok().json(Code { code, interval: Some(interval) }));
+
+    return Ok(HttpResponse::Ok().json(CodeRes {
+        code,
+        interval,
+        id: id.to_string(),
+    }));
 }
 
 async fn verify_otp(
-    body: Result<web::Json<Code>, <web::Json<Code> as FromRequest>::Error>,
-    auth: web::Data<TOTP>,
+    body: Result<web::Json<CodeReq>, <web::Json<CodeReq> as FromRequest>::Error>,
+    query: web::Query<Interval>,
+    secret: web::Data<String>,
 ) -> Result<HttpResponse, ErrorResponse> {
     if body.is_err() {
-        return Err(ErrorResponse::ClientError {
+        return Err(ErrorResponse::BadRequest {
             message: body.as_ref().unwrap_err().to_string(),
         });
     }
-    
+
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH);
 
     if timestamp.is_err() {
@@ -55,17 +74,23 @@ async fn verify_otp(
 
     let unwrapped_body = body.unwrap();
 
-    let interval = if unwrapped_body.interval.is_some() {
-        unwrapped_body.interval.unwrap()
-    } else {
-        DEFAULT_INTERVAL
+    let interval = match query.interval {
+        Some(expr) => expr,
+        None => DEFAULT_INTERVAL,
     };
-    
+
+    let id = match &query.id {
+        Some(x) => x,
+        None => "",
+    };
+
+    let auth = TOTP::new(format!("{}{}", secret.get_ref(), id));
+
     let verified = auth.verify(unwrapped_body.code, interval, timestamp.unwrap().as_secs());
 
     if !verified {
-        return Err(ErrorResponse::ClientError {
-            message: "Your code has expired.".to_string()
+        return Err(ErrorResponse::Unauthorized {
+            message: "Your code is incorrect or has expired.".to_string(),
         });
     }
 
@@ -73,7 +98,9 @@ async fn verify_otp(
 }
 
 pub fn setup(cfg: &mut web::ServiceConfig) {
-    cfg.service(web::resource("/generate").route(web::get().to(generate_otp)));
-
-    cfg.service(web::resource("/verify").route(web::put().to(verify_otp)));
+    cfg.service(
+        web::scope("/code")
+            .route("", web::get().to(generate_otp))
+            .route("/verify", web::put().to(verify_otp)),
+    );
 }
